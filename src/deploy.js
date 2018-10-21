@@ -34,7 +34,7 @@ class Deploy {
       .then(rl => this._fetchDirectory(rl))
       .then(rl => rl.close())
       .then(() => this._connect())
-      .catch(err => this._error(err));
+      .catch(err => this.error(err));
   }
 
   _clearLine() {
@@ -42,7 +42,7 @@ class Deploy {
     readline.clearLine(process.stdout, 0);
   }
 
-  _error(message) {
+  static error(message) {
     console.log(`\n${ chalk.red('Error:') } ${ message }\n`);
   }
 
@@ -75,7 +75,7 @@ class Deploy {
           this._clearLine();
           this._log(`${ question }${ chalk.green('Client') }`);
         } else {
-          this._error('Wrong answer');
+          this.error('Wrong answer');
           process.exit(0);
         }
         resolve(rl);
@@ -98,7 +98,7 @@ class Deploy {
             this._clearLine();
             this._log(`${ question }${ chalk.green('No') }`);
           } else {
-            this._error('Wrong answer');
+            this.error('Wrong answer');
             process.exit(0);
           }
           resolve(rl);
@@ -119,7 +119,7 @@ class Deploy {
           this._clearLine();
           this._log(`${ question }${ chalk.green(value) }`);
         } else {
-          this._error('Name can not be empty');
+          this.error('Name can not be empty');
           process.exit(0);
         }
         resolve(rl);
@@ -137,7 +137,7 @@ class Deploy {
           this._clearLine();
           this._log(`${ question }${ chalk.green(value) }`);
         } else {
-          this._error('Port can not be empty');
+          this.error('Port can not be empty');
           process.exit(0);
         }
         resolve(rl);
@@ -175,7 +175,7 @@ class Deploy {
           .then(() => this._exec(`rm -rf ${ this.props.buildName }`))
           .then(() => this._putBuild())
           .then(() => this._unzip())
-          .catch(err => this._error(err));
+          .catch(err => this.error(err));
       });
   }
 
