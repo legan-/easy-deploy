@@ -18,7 +18,7 @@ rawArgs.filter((arg, i) => {
 });
 
 const configPath = path.resolve((args.config || './deploy.config.js'));
-fs.readFile(configPath, 'utf8', (err, data) => {
+fs.readFile(configPath, 'utf8', err => {
   if (err) {
     Deploy.error(`Config file is not found.\n\nPlease do one of the following:\n   - check if ${ chalk.blue('deploy.config.js') } file added to the root folder\n   - run command with ${ chalk.blue('--config path/to/deploy.config.js') }`);
   } else {
