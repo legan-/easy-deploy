@@ -63,8 +63,8 @@ class Deploy {
 
   _fetchType(rl) {
     return new Promise(resolve => {
-      const question = 'Are you deploying server or client? ';
-      rl.question(`${ question }Server / .Client `, a => {
+      const question = 'Are you deploying a client or a server? - ';
+      rl.question(`${ question }(c/s) `, a => {
         const value = a.toString();
         if (value.match(/^s(erver)?$/i)) {
           this.props.isServer = true;
@@ -86,8 +86,8 @@ class Deploy {
   _fetchIteration(rl) {
     return new Promise(resolve => {
       if (this.props.isServer) {
-        const question = 'Is it a first run of this project? ';
-        rl.question(`${ question } .Yes / No `, a => {
+        const question = 'Is it a first run of this project? - ';
+        rl.question(`${ question }(n / y) `, a => {
           const value = a.toString();
           if (value.match(/^y(es)?$/i)) {
             this.props.isFirstRun = true;
