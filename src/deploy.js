@@ -68,8 +68,8 @@ class Deploy {
   _fetchType(rl) {
     return new Promise(resolve => {
       const question = 'Are you deploying a client or a server? - ';
-      rl.question(`${ question }(c/s) `, a => {
-        const value = a.toString();
+      rl.question(`${ question }[C/s] `, a => {
+        const value = a.toString() || 'c';
         if (value.match(/^s(erver)?$/i)) {
           this.props.isServer = true;
           this._clearLine();
@@ -91,8 +91,8 @@ class Deploy {
     return new Promise(resolve => {
       if (this.props.isServer) {
         const question = 'Is it a first run of this project? - ';
-        rl.question(`${ question }(n / y) `, a => {
-          const value = a.toString();
+        rl.question(`${ question }[N/y] `, a => {
+          const value = a.toString() || 'n';
           if (value.match(/^y(es)?$/i)) {
             this.props.isFirstRun = true;
             this._clearLine();
@@ -223,19 +223,26 @@ class Deploy {
 
   _runApp() {
     const { projectName, projectPort, isFirstRun } = this.props;
-    const command = isFirstRun ? `NODE_ENV=production PORT=${ projectPort } pm2 start server/app.js --watch --name ${ projectName }` : `pm2 restart ${ projectName }`;
+    const firstRun = `NODE_ENV=production PORT=${ projectPort } pm2 start server/index.js --watch --name ${ projectName }-client`;
+    const restart = `pm2 restart ${ projectName }-client`;
+    const command = isFirstRun ? firstRun : restart;
 
+    return this._exec(command);
+  }
+
+  _runNpmInstall() {
+    const command = 'npm install';
     return this._exec(command);
   }
 
   _unzip() {
     const { isServer, buildName } = this.props;
-    // const remoteHomeDir = `/home/${ projectName }`;
 
     if (isServer) {
       return Promise.resolve()
         .then(() => this._exec('rm -rf server'))
         .then(() => this._exec(`unzip ./${ buildName } -d ./server`))
+        .then(() => this._runNpmInstall())
         .then(() => this._runApp());
     } else {
       return Promise.resolve()
