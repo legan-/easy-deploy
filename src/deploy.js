@@ -227,7 +227,7 @@ class Deploy {
     const restart = `pm2 restart ${ projectName }-client`;
     const command = isFirstRun ? firstRun : restart;
 
-    return this._exec(command);
+    return this._exec(`echo ! run command: ${ command }`);
   }
 
   _runNpmInstall() {
@@ -240,9 +240,13 @@ class Deploy {
 
     if (isServer) {
       return Promise.resolve()
+        // запускать эти команды по очереди, сейчас они идут сразу все и время выполнения каждой варьинуется
         .then(() => this._exec('rm -rf server'))
         .then(() => this._exec(`unzip ./${ buildName } -d ./server`))
-        .then(() => this._runNpmInstall())
+        // запустить из /server: npm i
+        // .then(() => this._runNpmInstall())
+        .then(() => this._exec('echo ! you have to run "npm i" manually and then ->'))
+        // запустить приложение из корневой директории: NODE_ENV=production PORT=8082 pm2 start server/index.js --watch --name family-client
         .then(() => this._runApp());
     } else {
       return Promise.resolve()
