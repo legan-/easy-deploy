@@ -173,12 +173,12 @@ class Deploy {
       privateKey
     })
       .then(() => {
-        this._log('Connected!\n');
+        this._log(chalk.green('Connected\n'));
 
         Promise.resolve()
-          .then(() => this._exec(`rm -rf ${ this.props.buildName }`))
+          .then(() => this._remove(this.props.buildName))
           .then(() => this._putBuild())
-          .then(() => this._unzip())
+          .then(() => this._unpack())
           .catch(err => this._error(err));
       });
   }
@@ -213,7 +213,7 @@ class Deploy {
 
     return new Promise((resolve, reject) => {
       ssh.putFile(localPath, remotePath).then(() => {
-        this._log(chalk.green('Build uploaded'));
+        this._log(chalk.green('Build uploaded\n'));
         resolve();
       }, error => {
         reject(error);
@@ -223,29 +223,103 @@ class Deploy {
 
   _runApp() {
     const { projectName, projectPort, isFirstRun } = this.props;
+
+    const remoteHomeDir = `/home/${ projectName }`;
     const firstRun = `NODE_ENV=production PORT=${ projectPort } pm2 start server/index.js --watch --name ${ projectName }-client`;
     const restart = `pm2 restart ${ projectName }-client`;
     const command = isFirstRun ? firstRun : restart;
 
-    return this._exec(`echo ! run command: ${ command }`);
+    ssh.execCommand(command, { cwd: remoteHomeDir })
+      .then(result => {
+        const { stdout, stderr } = result;
+
+        return new Promise((resolve, reject) => {
+          if (stderr) {
+            reject(`${ chalk.red(command) }:: ${ stderr }`);
+          } else {
+            this._log(stdout);
+            resolve();
+          }
+        });
+      })
+      .catch(err => console.log('err', err));
   }
 
   _runNpmInstall() {
-    const command = 'npm install';
-    return this._exec(command);
+    const { projectName } = this.props;
+    const remoteHomeDir = `/home/${ projectName }`;
+    const command = 'cd server && npm install';
+
+    ssh.execCommand(command, { cwd: remoteHomeDir })
+      .then(result => {
+        const { stdout, stderr } = result;
+
+        return new Promise((resolve, reject) => {
+          if (stderr) {
+            reject(`${ chalk.red(command) }:: ${ stderr }`);
+          } else {
+            this._log(stdout);
+            resolve();
+          }
+        });
+      })
+      .catch(err => console.log('err', err));
+  }
+
+  _remove(name) {
+    const { projectName } = this.props;
+    const remoteHomeDir = `/home/${ projectName }`;
+    const command = `rm -rf ${ name }`;
+
+    ssh.execCommand(command, { cwd: remoteHomeDir })
+      .then(result => {
+        const { stderr } = result;
+
+        return new Promise((resolve, reject) => {
+          if (stderr) {
+            reject(`${ chalk.red(command) }:: ${ stderr }`);
+          } else {
+            this._log(chalk.green(`${ name } removed`));
+            resolve();
+          }
+        });
+      })
+      .catch(err => console.log('err', err));
   }
 
   _unzip() {
+    const { projectName, buildName } = this.props;
+    const remoteHomeDir = `/home/${ projectName }`;
+    const command = `unzip ./${ buildName } -d ./server`;
+
+    ssh.execCommand(command, { cwd: remoteHomeDir })
+      .then(result => {
+        const { stdout, stderr } = result;
+
+        return new Promise((resolve, reject) => {
+          if (stderr) {
+            reject(`${ chalk.red(command) }:: ${ stderr }`);
+          } else {
+            this._log(chalk.green('Unziped'));
+            this._log(stdout);
+            resolve();
+          }
+        });
+      })
+      .catch(err => console.log('err', err));
+  }
+
+  _unpack() {
     const { isServer, buildName } = this.props;
 
     if (isServer) {
       return Promise.resolve()
         // запускать эти команды по очереди, сейчас они идут сразу все и время выполнения каждой варьинуется
-        .then(() => this._exec('rm -rf server'))
-        .then(() => this._exec(`unzip ./${ buildName } -d ./server`))
+        .then(() => this._remove('server'))
+        .then(() => this._unzip())
         // запустить из /server: npm i
         // .then(() => this._runNpmInstall())
-        .then(() => this._exec('echo ! you have to run "npm i" manually and then ->'))
+        .then(() => this._exec('echo "! you have to run npm i manually and then"'))
         // запустить приложение из корневой директории: NODE_ENV=production PORT=8082 pm2 start server/index.js --watch --name family-client
         .then(() => this._runApp());
     } else {
