@@ -2,7 +2,7 @@
   "name": "@legan/deploy",
   "description": "Deploy easily",
   "author": "legan",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "main": "./lib/bin.js",
   "license": "ISC",
   "bin": {
