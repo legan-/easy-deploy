@@ -18,19 +18,21 @@ class Deploy {
       isServer: null,
       isFirstRun: false,
       localDir: '',
-      buildName: 'build.zip'
+      clientBuildName: 'build-client.zip',
+      serverBuildName: 'build-server.zip'
     };
 
     this._run();
   }
 
   _run() {
+
     Promise.resolve()
       .then(() => this._create())
       .then(rl => this._fetchType(rl))
       .then(rl => this._fetchIteration(rl))
       .then(rl => this._fetchName(rl))
-      .then(rl => this._fetchPort(rl))
+      .then(rl => this.props.isServer ? this._fetchPort(rl) : rl)
       .then(rl => this._fetchDirectory(rl))
       .then(rl => rl.close())
       .then(() => this._connect())
@@ -165,6 +167,7 @@ class Deploy {
 
   _connect() {
     const { host, port, username, privateKey } = this.config;
+    const { clientBuildName, serverBuildName, isServer } = this.props;
     this._log('\nConnecting...\n');
     ssh.connect({
       host,
@@ -173,43 +176,25 @@ class Deploy {
       privateKey
     })
       .then(() => {
+        const fileName = isServer ? serverBuildName : clientBuildName;
+
         this._log(chalk.green('Connected\n'));
 
         Promise.resolve()
-          .then(() => this._remove(this.props.buildName))
+          .then(() => this._remove(fileName))
           .then(() => this._putBuild())
           .then(() => this._unpack())
           .catch(err => this._error(err));
       });
   }
 
-  _exec(command) {
-    const { projectName } = this.props;
-    const remoteHomeDir = `/home/${ projectName }`;
-
-    ssh.execCommand(command, { cwd: remoteHomeDir }).then(result => {
-      const { stdout, stderr } = result;
-
-      return new Promise((resolve, reject) => {
-        if (stderr) {
-          reject(`${ chalk.red(command) }:: ${ stderr }`);
-        } else if (stdout) {
-          this._log(stdout);
-          resolve();
-        } else {
-          this._log(`${ command }: done`);
-          resolve();
-        }
-      });
-    });
-  }
-
   _putBuild() {
-    const { projectName, localDir, buildName } = this.props;
+    const { projectName, localDir, clientBuildName, serverBuildName, isServer } = this.props;
 
+    const fileName = isServer ? serverBuildName : clientBuildName;
     const remoteHomeDir = `/home/${ projectName }`;
-    const localPath = path.resolve(localDir, 'build', buildName);
-    const remotePath = path.resolve(remoteHomeDir, buildName);
+    const localPath = path.resolve(localDir, 'build', fileName);
+    const remotePath = path.resolve(remoteHomeDir, fileName);
 
     return new Promise((resolve, reject) => {
       ssh.putFile(localPath, remotePath).then(() => {
@@ -219,51 +204,6 @@ class Deploy {
         reject(error);
       });
     });
-  }
-
-  _runApp() {
-    const { projectName, projectPort, isFirstRun } = this.props;
-
-    const remoteHomeDir = `/home/${ projectName }`;
-    const firstRun = `NODE_ENV=production PORT=${ projectPort } pm2 start server/index.js --watch --name ${ projectName }-client`;
-    const restart = `pm2 restart ${ projectName }-client`;
-    const command = isFirstRun ? firstRun : restart;
-
-    ssh.execCommand(command, { cwd: remoteHomeDir })
-      .then(result => {
-        const { stdout, stderr } = result;
-
-        return new Promise((resolve, reject) => {
-          if (stderr) {
-            reject(`${ chalk.red(command) }:: ${ stderr }`);
-          } else {
-            this._log(stdout);
-            resolve();
-          }
-        });
-      })
-      .catch(err => console.log('err', err));
-  }
-
-  _runNpmInstall() {
-    const { projectName } = this.props;
-    const remoteHomeDir = `/home/${ projectName }`;
-    const command = 'cd server && npm install';
-
-    ssh.execCommand(command, { cwd: remoteHomeDir })
-      .then(result => {
-        const { stdout, stderr } = result;
-
-        return new Promise((resolve, reject) => {
-          if (stderr) {
-            reject(`${ chalk.red(command) }:: ${ stderr }`);
-          } else {
-            this._log(stdout);
-            resolve();
-          }
-        });
-      })
-      .catch(err => console.log('err', err));
   }
 
   _remove(name) {
@@ -287,46 +227,51 @@ class Deploy {
       .catch(err => console.log('err', err));
   }
 
-  _unzip() {
-    const { projectName, buildName } = this.props;
+  _exec(command) {
+    const { projectName } = this.props;
     const remoteHomeDir = `/home/${ projectName }`;
-    const command = `unzip ./${ buildName } -d ./server`;
 
-    ssh.execCommand(command, { cwd: remoteHomeDir })
-      .then(result => {
-        const { stdout, stderr } = result;
+    ssh.execCommand(command, { cwd: remoteHomeDir }).then(result => {
+      const { stdout, stderr } = result;
 
-        return new Promise((resolve, reject) => {
-          if (stderr) {
-            reject(`${ chalk.red(command) }:: ${ stderr }`);
-          } else {
-            this._log(chalk.green('Unziped'));
-            this._log(stdout);
-            resolve();
-          }
-        });
-      })
-      .catch(err => console.log('err', err));
+      return new Promise((resolve, reject) => {
+        if (stderr) {
+          reject(`${ chalk.red(command) }:: ${ stderr }`);
+        } else if (stdout) {
+          this._log(stdout);
+          resolve();
+        } else {
+          this._log(`${ command }: done`);
+          resolve();
+        }
+      });
+    });
   }
 
   _unpack() {
-    const { isServer, buildName } = this.props;
+    const { isServer, isFirstRun, projectName, projectPort } = this.props;
+    this._log('Running bash command...');
+    // unzip script must be included in ~/.ssh_functions (root)
+    let command = '';
 
     if (isServer) {
-      return Promise.resolve()
-        // запускать эти команды по очереди, сейчас они идут сразу все и время выполнения каждой варьинуется
-        .then(() => this._remove('server'))
-        .then(() => this._unzip())
-        // запустить из /server: npm i
-        // .then(() => this._runNpmInstall())
-        .then(() => this._exec('echo "! you have to run npm i manually and then"'))
-        // запустить приложение из корневой директории: NODE_ENV=production PORT=8082 pm2 start server/index.js --watch --name family-client
-        .then(() => this._runApp());
+      const port = isFirstRun ? ` ${ projectPort }` : '';
+      command = `source ~/.ssh_functions; unzip-server ${ projectName }${ port }`;
     } else {
-      return Promise.resolve()
-        .then(() => this._exec('rm -rf client'))
-        .then(() => this._exec(`unzip ./${ buildName } -d ./client`));
+      command = `source ~/.ssh_functions; unzip-client ${ projectName }`;
     }
+
+    ssh.execCommand(command).then(({ stdout, stderr }) => {
+      if (stderr) {
+        this._log(`${ chalk.red(command) }:: ${ stderr }`);
+      }
+      if (stdout) {
+        this._log(stdout);
+      } else {
+        this._log(`${ command }: done`);
+      }
+      process.exit(0);
+    });
   }
 }
 
