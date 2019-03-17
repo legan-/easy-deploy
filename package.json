@@ -2,7 +2,7 @@
   "name": "@legan/deploy",
   "description": "Deploy easily",
   "author": "legan",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "main": "./lib/bin.js",
   "license": "ISC",
   "bin": {
@@ -15,6 +15,10 @@
     "chalk": "^2.4.1",
     "node-ssh": "^5.1.2"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/legan-/easy-deploy"
+  },
   "devDependencies": {
     "@babel/cli": "^7.1.2",
     "@babel/core": "^7.1.2",
@@ -23,8 +27,8 @@
     "@babel/register": "^7.0.0",
     "babel-eslint": "^10.0.1",
     "babel-plugin-root-import": "^6.1.0",
-    "eslint": "^5.7.0",
-    "eslint-watch": "^4.0.2",
+    "eslint": "^5.15.2",
+    "eslint-watch": "^5.0.1",
     "npm-run-all": "^4.1.5",
     "rimraf": "^2.6.2"
   },
@@ -44,7 +48,11 @@
   "scripts": {
     "clean": "rimraf lib",
     "lint": "esw ./src/*.js --color",
+    "lint:watch": "yarn lint --watch",
     "build": "babel src --out-dir lib",
+    "build:watch": "yarn build --watch",
+    "dev": "npm-run-all --parallel build lint --silent",
+    "dev:watch": "npm-run-all --parallel build:watch lint:watch --silent",
     "prepublish": "npm-run-all clean lint build"
   }
 }
