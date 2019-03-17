@@ -4,23 +4,20 @@ import readline from 'readline';
 
 import node_ssh from 'node-ssh';
 
-/* eslint-disable no-console */
-
 const ssh = new node_ssh();
 
 class Deploy {
   constructor(config) {
-    this.config = config;
 
-    this.props = {
+    this.props = Object.assign({
       projectName: '',
       projectPort: '',
       isServer: null,
-      isFirstRun: false,
+      isFirstRun: null,
       localDir: '',
       clientBuildName: 'build-client.zip',
       serverBuildName: 'build-server.zip'
-    };
+    }, config);
 
     this._run();
   }
@@ -34,8 +31,7 @@ class Deploy {
       .then(rl => this._fetchName(rl))
       .then(rl => this.props.isServer ? this._fetchPort(rl) : rl)
       .then(rl => this._fetchDirectory(rl))
-      .then(rl => rl.close())
-      .then(() => this._connect())
+      .then(rl => this._connect(rl))
       .catch(err => this._error(err));
   }
 
@@ -45,6 +41,7 @@ class Deploy {
   }
 
   static error(message) {
+    /* eslint-disable-next-line no-console */
     console.log(`\n${ chalk.red('Error:') } ${ message }\n`);
   }
 
@@ -53,6 +50,7 @@ class Deploy {
   }
 
   _log(message) {
+    /* eslint-disable-next-line no-console */
     console.log(message);
   }
 
@@ -70,8 +68,13 @@ class Deploy {
   _fetchType(rl) {
     return new Promise(resolve => {
       const question = 'Are you deploying a client or a server? - ';
-      rl.question(`${ question }[C/s] `, a => {
-        const value = a.toString() || 'c';
+      const { isServer } = this.props;
+      const defaultValue = isServer === null ? '' : isServer ? 'Server' : 'Client';
+      const defaultValueToShow = defaultValue.length ? chalk.grey(defaultValue) : '[C/s]';
+
+      rl.question(`${ question }${ defaultValueToShow } `, a => {
+        const value = a.toString() || defaultValue || 'c';
+
         if (value.match(/^s(erver)?$/i)) {
           this.props.isServer = true;
           this._clearLine();
@@ -93,8 +96,13 @@ class Deploy {
     return new Promise(resolve => {
       if (this.props.isServer) {
         const question = 'Is it a first run of this project? - ';
-        rl.question(`${ question }[N/y] `, a => {
-          const value = a.toString() || 'n';
+        const { isFirstRun } = this.props;
+        const defaultValue = isFirstRun === null ? '' : isFirstRun ? 'Yes' : 'No';
+        const defaultValueToShow = defaultValue.length ? chalk.grey(defaultValue) : '[N/y]';
+
+        rl.question(`${ question }${ defaultValueToShow } `, a => {
+          const value = a.toString() || defaultValue || 'n';
+
           if (value.match(/^y(es)?$/i)) {
             this.props.isFirstRun = true;
             this._clearLine();
@@ -118,8 +126,11 @@ class Deploy {
   _fetchName(rl) {
     return new Promise(resolve => {
       const question = 'Name: ';
-      rl.question(question, a => {
-        const value = a.toString();
+      const { projectName } = this.props;
+      const defaultValue = projectName.length ? `${ chalk.grey(projectName) } ` : '';
+
+      rl.question(`${ question }${ defaultValue }`, a => {
+        const value = a.toString() || projectName;
         if (value.length) {
           this.props.projectName = value;
           this._clearLine();
@@ -136,8 +147,11 @@ class Deploy {
   _fetchPort(rl) {
     return new Promise(resolve => {
       const question = 'Port: ';
-      rl.question(question, a => {
-        const value = a.toString();
+      const { projectPort } = this.props;
+      const defaultValue = projectPort.length ? `${ chalk.grey(projectPort) } ` : '';
+
+      rl.question(`${ question }${ defaultValue }`, a => {
+        const value = a.toString() || projectPort;
         if (value.length) {
           this.props.projectPort = value;
           this._clearLine();
@@ -155,8 +169,11 @@ class Deploy {
     return new Promise(resolve => {
       const dir = path.resolve(__dirname, '..', '../../..');
       const question = 'Project path: ';
-      rl.question(`${ question }${ dir }/`, a => {
-        const value = path.resolve(dir, a);
+      const { localDir } = this.props;
+      const defaultValue = localDir.length ? chalk.grey(localDir) : `${ dir }/`;
+
+      rl.question(`${ question }${ defaultValue }`, a => {
+        const value = localDir || path.resolve(dir, a);
         this.props.localDir = value;
         this._clearLine();
         this._log(`${ question }${ chalk.green(value) }`);
@@ -165,31 +182,71 @@ class Deploy {
     });
   }
 
-  _connect() {
-    const { host, port, username, privateKey } = this.config;
-    const { clientBuildName, serverBuildName, isServer } = this.props;
-    this._log('\nConnecting...\n');
-    ssh.connect({
+  _connect(rl) {
+    const {
       host,
       port,
       username,
-      privateKey
-    })
-      .then(() => {
-        const fileName = isServer ? serverBuildName : clientBuildName;
+      password,
+      clientBuildName,
+      serverBuildName,
+      isServer
+    } = this.props;
 
-        this._log(chalk.green('Connected\n'));
+    this._log('\nConnecting...\n');
 
-        Promise.resolve()
-          .then(() => this._remove(fileName))
-          .then(() => this._putBuild())
-          .then(() => this._unpack())
-          .catch(err => this._error(err));
+    const connect = password => {
+      ssh
+        .connect({
+          host,
+          port,
+          username,
+          password
+        })
+        .then(() => {
+          const fileName = isServer ? serverBuildName : clientBuildName;
+
+          this._log(chalk.green('Connected\n'));
+
+          Promise.resolve()
+            .then(() => this._remove(fileName))
+            .then(() => this._putBuild())
+            .then(() => this._unpack())
+            .catch(err => this._error(err));
+        })
+        .catch(error => {
+          this._log(chalk.red('Error\n'));
+          this._log(error);
+        });
+    };
+
+    if (password === undefined) {
+      rl.stdoutMuted = true;
+      const question = `Please enter a password for ${ username }@${ host }:${ port } `;
+      rl.question(`${ question }`, answer => {
+        rl.close();
+        connect(answer);
       });
+    } else {
+      connect(password);
+    }
+
+    rl._writeToOutput = stringToWrite => {
+      if (rl.stdoutMuted)
+        rl.output.write('');
+      else
+        rl.output.write(stringToWrite);
+    };
   }
 
   _putBuild() {
-    const { projectName, localDir, clientBuildName, serverBuildName, isServer } = this.props;
+    const {
+      projectName,
+      localDir,
+      clientBuildName,
+      serverBuildName,
+      isServer
+    } = this.props;
 
     const fileName = isServer ? serverBuildName : clientBuildName;
     const remoteHomeDir = `/home/${ projectName }`;
@@ -207,7 +264,10 @@ class Deploy {
   }
 
   _remove(name) {
-    const { projectName } = this.props;
+    const {
+      projectName
+    } = this.props;
+
     const remoteHomeDir = `/home/${ projectName }`;
     const command = `rm -rf ${ name }`;
 
@@ -224,11 +284,14 @@ class Deploy {
           }
         });
       })
-      .catch(err => console.log('err', err));
+      .catch(error => this._log(error));
   }
 
   _exec(command) {
-    const { projectName } = this.props;
+    const {
+      projectName
+    } = this.props;
+
     const remoteHomeDir = `/home/${ projectName }`;
 
     ssh.execCommand(command, { cwd: remoteHomeDir }).then(result => {
@@ -249,7 +312,13 @@ class Deploy {
   }
 
   _unpack() {
-    const { isServer, isFirstRun, projectName, projectPort } = this.props;
+    const {
+      isServer,
+      isFirstRun,
+      projectName,
+      projectPort
+    } = this.props;
+
     this._log('Running bash command...');
     // unzip script must be included in ~/.ssh_functions (root)
     let command = '';
